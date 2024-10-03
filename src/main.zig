@@ -42,10 +42,10 @@ export fn init() void {
     });
 
     const verts = [_]f32 {
-        0.5, 0.5, 0.0, 1.0, 1.0,
-        0.5, -0.5, 0.0, 1.0, 0.0,
-        -0.5, -0.5, 0.0, 0.0, 0.0,
-        -0.5, 0.5, 0.0, 0.0, 1.0,
+         0.5,  0.5, 0.0,   1.0, 0.0,  1.0, 0.0, 0.0,
+         0.5, -0.5, 0.0,   1.0, 1.0,  0.0, 1.0, 0.0,
+        -0.5, -0.5, 0.0,   0.0, 1.0,  0.0, 0.0, 1.0,
+        -0.5,  0.5, 0.0,   0.0, 0.0,  1.0, 1.0, 0.0,
     };
     state.bind.vertex_buffers[0] = sg.makeBuffer(.{
         .type = .VERTEXBUFFER,
@@ -68,6 +68,7 @@ export fn init() void {
 
     pipe_desc.layout.attrs[0].format = .FLOAT3;
     pipe_desc.layout.attrs[1].format = .FLOAT2;
+    pipe_desc.layout.attrs[2].format = .FLOAT3;
 
     state.pipe = sg.makePipeline(pipe_desc);
 
@@ -101,7 +102,15 @@ export fn frame() void {
 }
 
 export fn event(ev: ?*const sapp.Event) void {
-    _ = ev;
+    const evnt = ev.?;
+
+    if (evnt.type == .KEY_DOWN) {
+        switch (evnt.key_code) {
+            .F => sapp.toggleFullscreen(),
+            .Q => sapp.requestQuit(),
+            else => {}
+        }
+    }
 }
 
 export fn cleanup() void {
@@ -135,6 +144,8 @@ export fn fetch_callback(response: ?*const sfetch.Response) void {
         if (image.pixels.len() > 0) {
             sg.initImage(state.bind.fs.images[shader.SLOT__ourTexture], img_desc);
         }
+    } else if (resp.failed) {
+        state.pass_action.colors[0].clear_value = .{ .r = 1.0, .g = 0.0, .b = 0.0, .a = 1.0 };
     }
 }
 
