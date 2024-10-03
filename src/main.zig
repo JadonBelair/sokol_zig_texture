@@ -8,6 +8,11 @@ const sfetch = sokol.fetch;
 
 const zigimg = @import("zigimg");
 
+const zmath = @import("zalgebra");
+const Mat4 = zmath.Mat4;
+const Vec4 = zmath.Vec4;
+const Vec3 = zmath.Vec3;
+
 const shader = @import("shaders/texture.glsl.zig");
 
 const state = struct {
@@ -15,7 +20,7 @@ const state = struct {
     var bind: sg.Bindings = .{};
     var pipe: sg.Pipeline = .{};
     var file_buffer: [512 * 1024]u8 = std.mem.zeroes([512 * 1024]u8);
-    var vs_params: shader.VsParams = .{ .aspectRatio = 0.5 };
+    var vs_params: shader.VsParams = .{ .aspectRatio = 0.5, .transform = std.mem.zeroes([16]f32) };
 };
 
 export fn init() void {
@@ -86,6 +91,11 @@ export fn init() void {
 
 export fn frame() void {
     sfetch.dowork();
+
+    var trans = Mat4.identity();
+    trans = trans.rotate(@floatFromInt(@mod(@divTrunc(std.time.milliTimestamp(), 10), 360)), Vec3.new(0.0, 0.0, 1.0));
+    trans = trans.scale(Vec3.new(0.5, 0.5, 0.5));
+    state.vs_params.transform = @bitCast(trans.data);
 
     state.vs_params.aspectRatio = sapp.heightf() / sapp.widthf();
 

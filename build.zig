@@ -26,15 +26,19 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
     exe.root_module.addImport("sokol", sokol_dep.module("sokol"));
 
     const zigimg_dep = b.dependency("zigimg", .{
         .target = target,
         .optimize = optimize,
     });
-
     exe.root_module.addImport("zigimg", zigimg_dep.module("zigimg"));
+
+    const zalgebra_dep = b.dependency("zalgebra", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    exe.root_module.addImport("zalgebra", zalgebra_dep.module("zalgebra"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
