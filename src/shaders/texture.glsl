@@ -7,13 +7,13 @@ out vec2 TexCoord;
 out vec3 ourColor;
 
 uniform vs_params {
-	float aspectRatio;
-	mat4 transform;
+	mat4 model;
+	mat4 view;
+	mat4 projection;
 };
 
 void main() {
-	gl_Position = transform * vec4(aPos, 1.0f);
-	gl_Position.x *= aspectRatio;
+	gl_Position = projection * view * model * vec4(aPos, 1.0f);
 
 	TexCoord = aTexCoord;
 	ourColor = aColor;

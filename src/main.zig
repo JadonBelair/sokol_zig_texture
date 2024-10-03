@@ -20,7 +20,23 @@ const state = struct {
     var bind: sg.Bindings = .{};
     var pipe: sg.Pipeline = .{};
     var file_buffer: [512 * 1024]u8 = std.mem.zeroes([512 * 1024]u8);
-    var vs_params: shader.VsParams = .{ .aspectRatio = 0.5, .transform = std.mem.zeroes([16]f32) };
+    var vs_params: shader.VsParams = .{
+        .model = std.mem.zeroes([16]f32),
+        .view = std.mem.zeroes([16]f32),
+        .projection = std.mem.zeroes([16]f32),
+    };
+
+    var camera_pos = Vec3.new(0.0, 0.0, 3.0);
+    var camera_front = Vec3.new(0.0, 0.0, -1.0);
+    var camera_up = Vec3.new(0.0, 1.0, 0.0);
+
+    var pitch: f32 = 0.0;
+    var yaw: f32 = -90.0;
+
+    var w_down: bool = false;
+    var a_down: bool = false;
+    var s_down: bool = false;
+    var d_down: bool = false;
 };
 
 export fn init() void {
@@ -35,6 +51,8 @@ export fn init() void {
         .max_requests = 1,
         .num_lanes = 1,
     });
+    sapp.lockMouse(true);
+    sapp.showMouse(false);
 
     state.bind.fs.images[shader.SLOT__ourTexture] = sg.allocImage();
     state.bind.fs.samplers[shader.SLOT__ourTexture_smp] = sg.allocSampler();
@@ -46,18 +64,18 @@ export fn init() void {
         .compare = .NEVER,
     });
 
-    const verts = [_]f32 {
-         0.5,  0.5, 0.0,   1.0, 0.0,  1.0, 0.0, 0.0,
-         0.5, -0.5, 0.0,   1.0, 1.0,  0.0, 1.0, 0.0,
-        -0.5, -0.5, 0.0,   0.0, 1.0,  0.0, 0.0, 1.0,
-        -0.5,  0.5, 0.0,   0.0, 0.0,  1.0, 1.0, 0.0,
+    const verts = [_]f32{
+         0.5,  0.5, 0.0,   1.0, 0.0,   1.0, 0.0, 0.0,
+         0.5, -0.5, 0.0,   1.0, 1.0,   0.0, 1.0, 0.0,
+        -0.5, -0.5, 0.0,   0.0, 1.0,   0.0, 0.0, 1.0,
+        -0.5,  0.5, 0.0,   0.0, 0.0,   1.0, 1.0, 0.0,
     };
     state.bind.vertex_buffers[0] = sg.makeBuffer(.{
         .type = .VERTEXBUFFER,
         .data = sg.asRange(&verts),
     });
 
-    const indices = [_]u16 {
+    const indices = [_]u16{
         0, 1, 3,
         1, 2, 3,
     };
@@ -69,6 +87,10 @@ export fn init() void {
     var pipe_desc: sg.PipelineDesc = .{
         .shader = sg.makeShader(shader.triangleShaderDesc(sg.queryBackend())),
         .index_type = .UINT16,
+        .depth = .{
+            .compare = .LESS_EQUAL,
+            .write_enabled = true,
+        },
     };
 
     pipe_desc.layout.attrs[0].format = .FLOAT3;
@@ -81,7 +103,7 @@ export fn init() void {
         .load_action = .CLEAR,
         .clear_value = .{ .r = 0.2, .g = 0.3, .b = 0.3, .a = 1.0 },
     };
-    
+
     _ = sfetch.send(.{
         .path = "test_image.png",
         .callback = fetch_callback,
@@ -92,21 +114,41 @@ export fn init() void {
 export fn frame() void {
     sfetch.dowork();
 
-    var trans = Mat4.identity();
-    trans = trans.rotate(@floatFromInt(@mod(@divTrunc(std.time.milliTimestamp(), 10), 360)), Vec3.new(0.0, 0.0, 1.0));
-    trans = trans.scale(Vec3.new(0.5, 0.5, 0.5));
-    state.vs_params.transform = @bitCast(trans.data);
-
-    state.vs_params.aspectRatio = sapp.heightf() / sapp.widthf();
+    const camera_speed = @as(f32, @floatCast(sapp.frameDuration())) * 5.0;
+    if (state.w_down) {
+        state.camera_pos = state.camera_pos.add(state.camera_front.scale(camera_speed));
+    }
+    if (state.s_down) {
+        state.camera_pos = state.camera_pos.sub(state.camera_front.scale(camera_speed));
+    }
+    if (state.a_down) {
+        state.camera_pos = state.camera_pos.sub(state.camera_front.cross(Vec3.up()).norm().scale(camera_speed));
+    }
+    if (state.d_down) {
+        state.camera_pos = state.camera_pos.add(state.camera_front.cross(Vec3.up()).norm().scale(camera_speed));
+    }
+    state.vs_params.view = @bitCast(zmath.lookAt(state.camera_pos, state.camera_pos.add(state.camera_front), Vec3.up()));
+    state.vs_params.projection = @bitCast(Mat4.perspective(45.0, sapp.widthf() / sapp.heightf(), 0.1, 100.0).data);
 
     sg.beginPass(.{
         .action = state.pass_action,
         .swapchain = sglue.swapchain(),
     });
     sg.applyPipeline(state.pipe);
-    sg.applyUniforms(.VS, shader.SLOT_vs_params, sg.asRange(&state.vs_params));
     sg.applyBindings(state.bind);
-    sg.draw(0, 6, 1);
+    for (0..10) |x| {
+        const float_x: f32 = @floatFromInt(x);
+        for (0..10) |y| {
+            const float_y: f32 = @floatFromInt(y);
+            state.vs_params.model = @bitCast(Mat4.identity()
+                .translate(Vec3.new(float_x * 1.25, 0.0, -1.25 * float_y))
+                .rotate(@cos(float_y) * 10.0, Vec3.new(1.0, 0.0, 0.0))
+                .scale(Vec3.new(1.0, 1.0, 1.0))
+                .data);
+            sg.applyUniforms(.VS, shader.SLOT_vs_params, sg.asRange(&state.vs_params));
+            sg.draw(0, 6, 1);
+        }
+    }
     sg.endPass();
     sg.commit();
 }
@@ -118,8 +160,53 @@ export fn event(ev: ?*const sapp.Event) void {
         switch (evnt.key_code) {
             .F => sapp.toggleFullscreen(),
             .Q => sapp.requestQuit(),
+            .W => state.w_down = true,
+            .S => state.s_down = true,
+            .A => state.a_down = true,
+            .D => state.d_down = true,
+            else => {},
+        }
+    } else if (evnt.type == .KEY_UP) {
+        switch (evnt.key_code) {
+            .W => state.w_down = false,
+            .S => state.s_down = false,
+            .A => state.a_down = false,
+            .D => state.d_down = false,
             else => {}
         }
+    } else if (evnt.type == .MOUSE_MOVE) {
+        const sensitivity = 0.1;
+        const mouse_speed_x = evnt.mouse_dx;
+        const mouse_speed_y = -evnt.mouse_dy;
+
+        state.yaw += mouse_speed_x * sensitivity;
+        state.pitch += mouse_speed_y * sensitivity;
+
+        if (state.pitch > 89.0) {
+            state.pitch = 89.0;
+        } else if (state.pitch < -89.0) {
+            state.pitch = -89.0;
+        }
+
+        if (state.yaw < 0.0) {
+            state.yaw += 360.0;
+        } else if (state.yaw > 360.0) {
+            state.yaw -= 360.0;
+        }
+
+        var direction = Vec3.new(
+            @cos(std.math.degreesToRadians(state.yaw)) * @cos(std.math.degreesToRadians(state.pitch)),
+            @sin(std.math.degreesToRadians(state.pitch)),
+            @sin(std.math.degreesToRadians(state.yaw)) * @cos(std.math.degreesToRadians(state.pitch)),
+        );
+
+        state.camera_front = direction.norm();
+
+        const camera_right = state.camera_front.cross(Vec3.up()).norm();
+        state.camera_up = camera_right.cross(state.camera_front).norm();
+    } else if (evnt.type == .FOCUSED) {
+        sapp.lockMouse(false);
+        sapp.lockMouse(true);
     }
 }
 
@@ -130,7 +217,7 @@ export fn cleanup() void {
 export fn fetch_callback(response: ?*const sfetch.Response) void {
     const resp = response.?;
     if (resp.fetched) {
-        var gpa = std.heap.GeneralPurposeAllocator(.{}) {};
+        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
         const allocator = gpa.allocator();
         defer _ = gpa.deinit();
 
