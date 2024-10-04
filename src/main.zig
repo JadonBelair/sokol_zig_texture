@@ -19,11 +19,19 @@ const state = struct {
     var pass_action: sg.PassAction = .{};
     var bind: sg.Bindings = .{};
     var pipe: sg.Pipeline = .{};
+    var light_bind: sg.Bindings = .{};
+    var light_pipe: sg.Pipeline = .{};
     var file_buffer: [512 * 1024]u8 = std.mem.zeroes([512 * 1024]u8);
     var vs_params: shader.VsParams = .{
         .model = std.mem.zeroes([16]f32),
         .view = std.mem.zeroes([16]f32),
         .projection = std.mem.zeroes([16]f32),
+    };
+
+    var fs_params: shader.FsParams = .{
+        .light_color = Vec3.new(1.0, 1.0, 1.0).toArray(),
+        .light_pos = Vec3.zero().toArray(),
+        .view_pos = Vec3.zero().toArray(),
     };
 
     var camera_pos = Vec3.new(0.0, 0.0, 3.0);
@@ -37,6 +45,9 @@ const state = struct {
     var a_down: bool = false;
     var s_down: bool = false;
     var d_down: bool = false;
+
+    var space_down: bool = false;
+    var shift_down: bool = false;
 };
 
 export fn init() void {
@@ -66,37 +77,42 @@ export fn init() void {
     });
 
     const verts = [_]f32{
-         0.5, -0.5,  0.5,   1.0, 1.0,
-         0.5,  0.5,  0.5,   1.0, 0.0,
-        -0.5,  0.5,  0.5,   0.0, 0.0,
-        -0.5, -0.5,  0.5,   0.0, 1.0,
+         0.5, -0.5,  0.5,   1.0, 1.0,    0.0,  0.0,  1.0,
+         0.5,  0.5,  0.5,   1.0, 0.0,    0.0,  0.0,  1.0,
+        -0.5,  0.5,  0.5,   0.0, 0.0,    0.0,  0.0,  1.0,
+        -0.5, -0.5,  0.5,   0.0, 1.0,    0.0,  0.0,  1.0,
 
-        -0.5, -0.5, -0.5,   1.0, 1.0,
-        -0.5,  0.5, -0.5,   1.0, 0.0,
-         0.5,  0.5, -0.5,   0.0, 0.0,
-         0.5, -0.5, -0.5,   0.0, 1.0,
+        -0.5, -0.5, -0.5,   1.0, 1.0,    0.0,  0.0, -1.0,
+        -0.5,  0.5, -0.5,   1.0, 0.0,    0.0,  0.0, -1.0,
+         0.5,  0.5, -0.5,   0.0, 0.0,    0.0,  0.0, -1.0,
+         0.5, -0.5, -0.5,   0.0, 1.0,    0.0,  0.0, -1.0,
 
-         0.5, -0.5, -0.5,   1.0, 1.0,
-         0.5,  0.5, -0.5,   1.0, 0.0,
-         0.5,  0.5,  0.5,   0.0, 0.0,
-         0.5, -0.5,  0.5,   0.0, 1.0,
+         0.5, -0.5, -0.5,   1.0, 1.0,    1.0,  0.0,  0.0,
+         0.5,  0.5, -0.5,   1.0, 0.0,    1.0,  0.0,  0.0,
+         0.5,  0.5,  0.5,   0.0, 0.0,    1.0,  0.0,  0.0,
+         0.5, -0.5,  0.5,   0.0, 1.0,    1.0,  0.0,  0.0,
 
-        -0.5, -0.5,  0.5,   1.0, 1.0,
-        -0.5,  0.5,  0.5,   1.0, 0.0,
-        -0.5,  0.5, -0.5,   0.0, 0.0,
-        -0.5, -0.5, -0.5,   0.0, 1.0,
+        -0.5, -0.5,  0.5,   1.0, 1.0,   -1.0,  0.0,  0.0,
+        -0.5,  0.5,  0.5,   1.0, 0.0,   -1.0,  0.0,  0.0,
+        -0.5,  0.5, -0.5,   0.0, 0.0,   -1.0,  0.0,  0.0,
+        -0.5, -0.5, -0.5,   0.0, 1.0,   -1.0,  0.0,  0.0,
 
-        -0.5,  0.5, -0.5,   1.0, 1.0,
-        -0.5,  0.5,  0.5,   1.0, 0.0,
-         0.5,  0.5,  0.5,   0.0, 0.0,
-         0.5,  0.5, -0.5,   0.0, 1.0,
+        -0.5,  0.5, -0.5,   1.0, 1.0,    0.0,  1.0,  0.0,
+        -0.5,  0.5,  0.5,   1.0, 0.0,    0.0,  1.0,  0.0,
+         0.5,  0.5,  0.5,   0.0, 0.0,    0.0,  1.0,  0.0,
+         0.5,  0.5, -0.5,   0.0, 1.0,    0.0,  1.0,  0.0,
 
-         0.5, -0.5, -0.5,   1.0, 1.0,
-         0.5, -0.5,  0.5,   1.0, 0.0,
-        -0.5, -0.5,  0.5,   0.0, 0.0,
-        -0.5, -0.5, -0.5,   0.0, 1.0,
+         0.5, -0.5, -0.5,   1.0, 1.0,    0.0, -1.0,  0.0,
+         0.5, -0.5,  0.5,   1.0, 0.0,    0.0, -1.0,  0.0,
+        -0.5, -0.5,  0.5,   0.0, 0.0,    0.0, -1.0,  0.0,
+        -0.5, -0.5, -0.5,   0.0, 1.0,    0.0, -1.0,  0.0,
     };
     state.bind.vertex_buffers[0] = sg.makeBuffer(.{
+        .type = .VERTEXBUFFER,
+        .data = sg.asRange(&verts),
+    });
+
+    state.light_bind.vertex_buffers[0] = sg.makeBuffer(.{
         .type = .VERTEXBUFFER,
         .data = sg.asRange(&verts),
     });
@@ -125,6 +141,11 @@ export fn init() void {
         .data = sg.asRange(&indices),
     });
 
+    state.light_bind.index_buffer = sg.makeBuffer(.{
+        .type = .INDEXBUFFER,
+        .data = sg.asRange(&indices),
+    });
+
     var pipe_desc: sg.PipelineDesc = .{
         .shader = sg.makeShader(shader.triangleShaderDesc(sg.queryBackend())),
         .index_type = .UINT16,
@@ -138,8 +159,13 @@ export fn init() void {
 
     pipe_desc.layout.attrs[0].format = .FLOAT3;
     pipe_desc.layout.attrs[1].format = .FLOAT2;
+    pipe_desc.layout.attrs[2].format = .FLOAT3;
 
     state.pipe = sg.makePipeline(pipe_desc);
+
+    var light_pipe_desc = pipe_desc;
+    light_pipe_desc.shader = sg.makeShader(shader.lightCubeShaderDesc(sg.queryBackend()));
+    state.light_pipe = sg.makePipeline(light_pipe_desc);
 
     state.pass_action.colors[0] = .{
         .load_action = .CLEAR,
@@ -157,7 +183,7 @@ export fn frame() void {
     sfetch.dowork();
 
     const cube_positions: [10]Vec3 = [10]Vec3{
-        Vec3.new(0.0, 0.0, 0.0),
+        Vec3.new(-0.5, 0.5, -0.5),
         Vec3.new(2.0, 5.0, -15.0),
         Vec3.new(-1.5, -2.2, -2.5),
         Vec3.new(-3.8, -2.0, -12.3),
@@ -168,6 +194,11 @@ export fn frame() void {
         Vec3.new(1.5, 0.2, -1.5),
         Vec3.new(-1.3, 1.0, -1.5),
     };
+
+    const light_position = Vec3.new(2.0, 2.0, 2.0);
+
+    state.fs_params.light_pos = light_position.toArray();
+    state.fs_params.view_pos = state.camera_pos.toArray();
 
     const camera_speed = @as(f32, @floatCast(sapp.frameDuration())) * 5.0;
     if (state.w_down) {
@@ -182,6 +213,12 @@ export fn frame() void {
     if (state.d_down) {
         state.camera_pos = state.camera_pos.add(state.camera_front.cross(Vec3.up()).norm().scale(camera_speed));
     }
+    if (state.space_down) {
+        state.camera_pos = state.camera_pos.add(Vec3.up().scale(camera_speed));
+    }
+    if (state.shift_down) {
+        state.camera_pos = state.camera_pos.sub(Vec3.up().scale(camera_speed));
+    }
     state.vs_params.view = @bitCast(zmath.lookAt(state.camera_pos, state.camera_pos.add(state.camera_front), Vec3.up()));
     state.vs_params.projection = @bitCast(Mat4.perspective(45.0, sapp.widthf() / sapp.heightf(), 0.1, 100.0).data);
 
@@ -193,11 +230,19 @@ export fn frame() void {
     sg.applyPipeline(state.pipe);
     sg.applyBindings(state.bind);
 
+    sg.applyUniforms(.FS, shader.SLOT_fs_params, sg.asRange(&state.fs_params));
     for (0.., cube_positions) |i, position| {
         state.vs_params.model = @bitCast(Mat4.identity().translate(position).rotate(20.0 * @as(f32, @floatFromInt(i)), Vec3.new(1.0, 0.3, 0.5)));
         sg.applyUniforms(.VS, shader.SLOT_vs_params, sg.asRange(&state.vs_params));
         sg.draw(0, 36, 1);
     }
+
+    sg.applyPipeline(state.light_pipe);
+    sg.applyBindings(state.light_bind);
+
+    state.vs_params.model = @bitCast(Mat4.identity().translate(light_position).scale(Vec3.new(0.5, 0.5, 0.5)));
+    sg.applyUniforms(.VS, shader.SLOT_vs_params, sg.asRange(&state.vs_params));
+    sg.draw(0, 36, 1);
 
     sg.endPass();
     sg.commit();
@@ -214,6 +259,8 @@ export fn event(ev: ?*const sapp.Event) void {
             .S => state.s_down = true,
             .A => state.a_down = true,
             .D => state.d_down = true,
+            .SPACE => state.space_down = true,
+            .LEFT_SHIFT => state.shift_down = true,
             else => {},
         }
     } else if (evnt.type == .KEY_UP) {
@@ -222,6 +269,8 @@ export fn event(ev: ?*const sapp.Event) void {
             .S => state.s_down = false,
             .A => state.a_down = false,
             .D => state.d_down = false,
+            .SPACE => state.space_down = false,
+            .LEFT_SHIFT => state.shift_down = false,
             else => {}
         }
     } else if (evnt.type == .MOUSE_MOVE) {
