@@ -222,7 +222,6 @@ export fn frame() void {
     state.vs_params.view = @bitCast(zmath.lookAt(state.camera_pos, state.camera_pos.add(state.camera_front), Vec3.up()));
     state.vs_params.projection = @bitCast(Mat4.perspective(45.0, sapp.widthf() / sapp.heightf(), 0.1, 100.0).data);
 
-
     sg.beginPass(.{
         .action = state.pass_action,
         .swapchain = sglue.swapchain(),
@@ -232,7 +231,12 @@ export fn frame() void {
 
     sg.applyUniforms(.FS, shader.SLOT_fs_params, sg.asRange(&state.fs_params));
     for (0.., cube_positions) |i, position| {
-        state.vs_params.model = @bitCast(Mat4.identity().translate(position).rotate(20.0 * @as(f32, @floatFromInt(i)), Vec3.new(1.0, 0.3, 0.5)));
+        var model = Mat4.identity();
+        model = model.translate(position);
+        model = model.rotate(20.0 * @as(f32, @floatFromInt(i)), Vec3.new(1.0, 0.3, 0.5).norm());
+        model = model.scale(Vec3.new(1.0, 1.0, 1.0));
+
+        state.vs_params.model = @bitCast(model);
         sg.applyUniforms(.VS, shader.SLOT_vs_params, sg.asRange(&state.vs_params));
         sg.draw(0, 36, 1);
     }
