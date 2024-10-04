@@ -51,6 +51,7 @@ export fn init() void {
         .max_requests = 1,
         .num_lanes = 1,
     });
+
     sapp.lockMouse(true);
     sapp.showMouse(false);
 
@@ -65,28 +66,65 @@ export fn init() void {
     });
 
     const verts = [_]f32{
-         0.5,  0.5, 0.0,   1.0, 0.0,   1.0, 0.0, 0.0,
-         0.5, -0.5, 0.0,   1.0, 1.0,   0.0, 1.0, 0.0,
-        -0.5, -0.5, 0.0,   0.0, 1.0,   0.0, 0.0, 1.0,
-        -0.5,  0.5, 0.0,   0.0, 0.0,   1.0, 1.0, 0.0,
+        -0.5, -0.5, -0.5,  0.0, 0.0,
+         0.5, -0.5, -0.5,  1.0, 0.0,
+         0.5,  0.5, -0.5,  1.0, 1.0,
+         0.5,  0.5, -0.5,  1.0, 1.0,
+        -0.5,  0.5, -0.5,  0.0, 1.0,
+        -0.5, -0.5, -0.5,  0.0, 0.0,
+
+        -0.5, -0.5,  0.5,  0.0, 0.0,
+         0.5, -0.5,  0.5,  1.0, 0.0,
+         0.5,  0.5,  0.5,  1.0, 1.0,
+         0.5,  0.5,  0.5,  1.0, 1.0,
+        -0.5,  0.5,  0.5,  0.0, 1.0,
+        -0.5, -0.5,  0.5,  0.0, 0.0,
+
+        -0.5,  0.5,  0.5,  1.0, 0.0,
+        -0.5,  0.5, -0.5,  1.0, 1.0,
+        -0.5, -0.5, -0.5,  0.0, 1.0,
+        -0.5, -0.5, -0.5,  0.0, 1.0,
+        -0.5, -0.5,  0.5,  0.0, 0.0,
+        -0.5,  0.5,  0.5,  1.0, 0.0,
+
+         0.5,  0.5,  0.5,  1.0, 0.0,
+         0.5,  0.5, -0.5,  1.0, 1.0,
+         0.5, -0.5, -0.5,  0.0, 1.0,
+         0.5, -0.5, -0.5,  0.0, 1.0,
+         0.5, -0.5,  0.5,  0.0, 0.0,
+         0.5,  0.5,  0.5,  1.0, 0.0,
+
+        -0.5, -0.5, -0.5,  0.0, 1.0,
+         0.5, -0.5, -0.5,  1.0, 1.0,
+         0.5, -0.5,  0.5,  1.0, 0.0,
+         0.5, -0.5,  0.5,  1.0, 0.0,
+        -0.5, -0.5,  0.5,  0.0, 0.0,
+        -0.5, -0.5, -0.5,  0.0, 1.0,
+
+        -0.5,  0.5, -0.5,  0.0, 1.0,
+         0.5,  0.5, -0.5,  1.0, 1.0,
+         0.5,  0.5,  0.5,  1.0, 0.0,
+         0.5,  0.5,  0.5,  1.0, 0.0,
+        -0.5,  0.5,  0.5,  0.0, 0.0,
+        -0.5,  0.5, -0.5,  0.0, 1.0,
     };
     state.bind.vertex_buffers[0] = sg.makeBuffer(.{
         .type = .VERTEXBUFFER,
         .data = sg.asRange(&verts),
     });
 
-    const indices = [_]u16{
-        0, 1, 3,
-        1, 2, 3,
-    };
-    state.bind.index_buffer = sg.makeBuffer(.{
-        .type = .INDEXBUFFER,
-        .data = sg.asRange(&indices),
-    });
+    // const indices = [_]u16{
+    //     0, 1, 3,
+    //     1, 2, 3,
+    // };
+    // state.bind.index_buffer = sg.makeBuffer(.{
+    //     .type = .INDEXBUFFER,
+    //     .data = sg.asRange(&indices),
+    // });
 
     var pipe_desc: sg.PipelineDesc = .{
         .shader = sg.makeShader(shader.triangleShaderDesc(sg.queryBackend())),
-        .index_type = .UINT16,
+        // .index_type = .UINT16,
         .depth = .{
             .compare = .LESS_EQUAL,
             .write_enabled = true,
@@ -95,7 +133,6 @@ export fn init() void {
 
     pipe_desc.layout.attrs[0].format = .FLOAT3;
     pipe_desc.layout.attrs[1].format = .FLOAT2;
-    pipe_desc.layout.attrs[2].format = .FLOAT3;
 
     state.pipe = sg.makePipeline(pipe_desc);
 
@@ -114,6 +151,19 @@ export fn init() void {
 export fn frame() void {
     sfetch.dowork();
 
+    const cube_positions: [10]Vec3 = [10]Vec3{
+        Vec3.new(0.0, 0.0, 0.0),
+        Vec3.new(2.0, 5.0, -15.0),
+        Vec3.new(-1.5, -2.2, -2.5),
+        Vec3.new(-3.8, -2.0, -12.3),
+        Vec3.new(2.4, -0.4, -3.5),
+        Vec3.new(-1.7, 3.0, -7.5),
+        Vec3.new(1.3, -2.0, -2.5),
+        Vec3.new(1.5, 2.0, -2.5),
+        Vec3.new(1.5, 0.2, -1.5),
+        Vec3.new(-1.3, 1.0, -1.5),
+    };
+
     const camera_speed = @as(f32, @floatCast(sapp.frameDuration())) * 5.0;
     if (state.w_down) {
         state.camera_pos = state.camera_pos.add(state.camera_front.scale(camera_speed));
@@ -130,25 +180,20 @@ export fn frame() void {
     state.vs_params.view = @bitCast(zmath.lookAt(state.camera_pos, state.camera_pos.add(state.camera_front), Vec3.up()));
     state.vs_params.projection = @bitCast(Mat4.perspective(45.0, sapp.widthf() / sapp.heightf(), 0.1, 100.0).data);
 
+
     sg.beginPass(.{
         .action = state.pass_action,
         .swapchain = sglue.swapchain(),
     });
     sg.applyPipeline(state.pipe);
     sg.applyBindings(state.bind);
-    for (0..10) |x| {
-        const float_x: f32 = @floatFromInt(x);
-        for (0..10) |y| {
-            const float_y: f32 = @floatFromInt(y);
-            state.vs_params.model = @bitCast(Mat4.identity()
-                .translate(Vec3.new(float_x * 1.25, 0.0, -1.25 * float_y))
-                .rotate(@cos(float_y) * 10.0, Vec3.new(1.0, 0.0, 0.0))
-                .scale(Vec3.new(1.0, 1.0, 1.0))
-                .data);
-            sg.applyUniforms(.VS, shader.SLOT_vs_params, sg.asRange(&state.vs_params));
-            sg.draw(0, 6, 1);
-        }
+
+    for (0.., cube_positions) |i, position| {
+        state.vs_params.model = @bitCast(Mat4.identity().translate(position).rotate(20.0 * @as(f32, @floatFromInt(i)), Vec3.new(1.0, 0.3, 0.5)));
+        sg.applyUniforms(.VS, shader.SLOT_vs_params, sg.asRange(&state.vs_params));
+        sg.draw(0, 36, 1);
     }
+
     sg.endPass();
     sg.commit();
 }
