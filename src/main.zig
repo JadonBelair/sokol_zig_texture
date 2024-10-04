@@ -132,6 +132,8 @@ export fn init() void {
             .compare = .LESS_EQUAL,
             .write_enabled = true,
         },
+        .cull_mode = .BACK,
+        .face_winding = .CCW,
     };
 
     pipe_desc.layout.attrs[0].format = .FLOAT3;
