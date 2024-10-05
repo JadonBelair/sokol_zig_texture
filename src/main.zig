@@ -8,10 +8,9 @@ const sfetch = sokol.fetch;
 
 const zigimg = @import("zigimg");
 
-const zmath = @import("zalgebra");
-const Mat4 = zmath.Mat4;
-const Vec4 = zmath.Vec4;
-const Vec3 = zmath.Vec3;
+const zlm = @import("zlm");
+const Mat4 = zlm.Mat4;
+const Vec3 = zlm.Vec3;
 
 const shader = @import("shaders/texture.glsl.zig");
 
@@ -29,9 +28,9 @@ const state = struct {
     };
 
     var fs_params: shader.FsParams = .{
-        .light_color = Vec3.new(1.0, 1.0, 1.0).toArray(),
-        .light_pos = Vec3.zero().toArray(),
-        .view_pos = Vec3.zero().toArray(),
+        .light_color = @bitCast(Vec3.new(1.0, 1.0, 1.0)),
+        .light_pos = @bitCast(Vec3.zero),
+        .view_pos = @bitCast(Vec3.zero),
     };
 
     var camera_pos = Vec3.new(0.0, 0.0, 3.0);
@@ -183,7 +182,7 @@ export fn frame() void {
     sfetch.dowork();
 
     const cube_positions: [10]Vec3 = [10]Vec3{
-        Vec3.new(-0.5, 0.5, -0.5),
+        Vec3.new(0.0, 0.0, 0.0),
         Vec3.new(2.0, 5.0, -15.0),
         Vec3.new(-1.5, -2.2, -2.5),
         Vec3.new(-3.8, -2.0, -12.3),
@@ -197,8 +196,8 @@ export fn frame() void {
 
     const light_position = Vec3.new(2.0, 2.0, 2.0);
 
-    state.fs_params.light_pos = light_position.toArray();
-    state.fs_params.view_pos = state.camera_pos.toArray();
+    state.fs_params.light_pos = @bitCast(light_position);
+    state.fs_params.view_pos = @bitCast(state.camera_pos);
 
     const camera_speed = @as(f32, @floatCast(sapp.frameDuration())) * 5.0;
     if (state.w_down) {
@@ -208,19 +207,19 @@ export fn frame() void {
         state.camera_pos = state.camera_pos.sub(state.camera_front.scale(camera_speed));
     }
     if (state.a_down) {
-        state.camera_pos = state.camera_pos.sub(state.camera_front.cross(Vec3.up()).norm().scale(camera_speed));
+        state.camera_pos = state.camera_pos.sub(state.camera_front.cross(Vec3.unitY).normalize().scale(camera_speed));
     }
     if (state.d_down) {
-        state.camera_pos = state.camera_pos.add(state.camera_front.cross(Vec3.up()).norm().scale(camera_speed));
+        state.camera_pos = state.camera_pos.add(state.camera_front.cross(Vec3.unitY).normalize().scale(camera_speed));
     }
     if (state.space_down) {
-        state.camera_pos = state.camera_pos.add(Vec3.up().scale(camera_speed));
+        state.camera_pos = state.camera_pos.add(Vec3.unitY.scale(camera_speed));
     }
     if (state.shift_down) {
-        state.camera_pos = state.camera_pos.sub(Vec3.up().scale(camera_speed));
+        state.camera_pos = state.camera_pos.sub(Vec3.unitY.scale(camera_speed));
     }
-    state.vs_params.view = @bitCast(zmath.lookAt(state.camera_pos, state.camera_pos.add(state.camera_front), Vec3.up()));
-    state.vs_params.projection = @bitCast(Mat4.perspective(45.0, sapp.widthf() / sapp.heightf(), 0.1, 100.0).data);
+    state.vs_params.view = @bitCast(zlm.Mat4.createLookAt(state.camera_pos, state.camera_pos.add(state.camera_front), Vec3.unitY));
+    state.vs_params.projection = @bitCast(Mat4.createPerspective(zlm.toRadians(45.0), sapp.widthf() / sapp.heightf(), 0.1, 100.0));
 
     sg.beginPass(.{
         .action = state.pass_action,
@@ -231,10 +230,12 @@ export fn frame() void {
 
     sg.applyUniforms(.FS, shader.SLOT_fs_params, sg.asRange(&state.fs_params));
     for (0.., cube_positions) |i, position| {
-        var model = Mat4.identity();
-        model = model.translate(position);
-        model = model.rotate(20.0 * @as(f32, @floatFromInt(i)), Vec3.new(1.0, 0.3, 0.5).norm());
-        model = model.scale(Vec3.new(1.0, 1.0, 1.0));
+        const translation_matrix = Mat4.createTranslation(position);
+        const rotation_matrix = Mat4.createAngleAxis(Vec3.new(1.0, 0.3, 0.5), zlm.toRadians(20.0 * @as(f32, @floatFromInt(i))));
+        const scale_matrix = Mat4.createScale(1.0, 1.0, 1.0);
+        var model = scale_matrix;
+        model = model.mul(rotation_matrix);
+        model = model.mul(translation_matrix);
 
         state.vs_params.model = @bitCast(model);
         sg.applyUniforms(.VS, shader.SLOT_vs_params, sg.asRange(&state.vs_params));
@@ -244,7 +245,10 @@ export fn frame() void {
     sg.applyPipeline(state.light_pipe);
     sg.applyBindings(state.light_bind);
 
-    state.vs_params.model = @bitCast(Mat4.identity().translate(light_position).scale(Vec3.new(0.5, 0.5, 0.5)));
+    const translation_matrix = Mat4.createTranslation(light_position);
+    const scale_matrix = Mat4.createScale(0.5, 0.5, 0.5);
+    const model = scale_matrix.mul(translation_matrix);
+    state.vs_params.model = @bitCast(model);
     sg.applyUniforms(.VS, shader.SLOT_vs_params, sg.asRange(&state.vs_params));
     sg.draw(0, 36, 1);
 
@@ -298,15 +302,15 @@ export fn event(ev: ?*const sapp.Event) void {
         }
 
         var direction = Vec3.new(
-            @cos(std.math.degreesToRadians(state.yaw)) * @cos(std.math.degreesToRadians(state.pitch)),
-            @sin(std.math.degreesToRadians(state.pitch)),
-            @sin(std.math.degreesToRadians(state.yaw)) * @cos(std.math.degreesToRadians(state.pitch)),
+            @cos(zlm.toRadians(state.yaw)) * @cos(zlm.toRadians(state.pitch)),
+            @sin(zlm.toRadians(state.pitch)),
+            @sin(zlm.toRadians(state.yaw)) * @cos(zlm.toRadians(state.pitch)),
         );
 
-        state.camera_front = direction.norm();
+        state.camera_front = direction.normalize();
 
-        const camera_right = state.camera_front.cross(Vec3.up()).norm();
-        state.camera_up = camera_right.cross(state.camera_front).norm();
+        const camera_right = state.camera_front.cross(Vec3.unitY).normalize();
+        state.camera_up = camera_right.cross(state.camera_front).normalize();
     } else if (evnt.type == .FOCUSED) {
         sapp.lockMouse(false);
         sapp.lockMouse(true);

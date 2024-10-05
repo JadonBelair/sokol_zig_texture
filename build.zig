@@ -34,11 +34,8 @@ pub fn build(b: *std.Build) void {
     });
     exe.root_module.addImport("zigimg", zigimg_dep.module("zigimg"));
 
-    const zalgebra_dep = b.dependency("zalgebra", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.root_module.addImport("zalgebra", zalgebra_dep.module("zalgebra"));
+    const zlm_dep = b.dependency("zlm", .{});
+    exe.root_module.addImport("zlm", zlm_dep.module("zlm"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
