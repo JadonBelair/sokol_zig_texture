@@ -63,12 +63,22 @@ void main() {
 }
 @end
 
+@vs light_cube_vs
+layout (location=0) in vec3 aPos;
+
+uniform vs_params {
+	mat4 model;
+	mat4 view;
+	mat4 projection;
+};
+
+void main() {
+	gl_Position = projection * view * model * vec4(aPos, 1.0f);
+}
+@end
+
 @fs light_cube_fs
 out vec4 FragColor;
-
-in vec2 TexCoord;
-in vec3 FragPos;
-in vec3 Normal;
 
 void main() {
 	FragColor = vec4(1.0f);
@@ -76,4 +86,4 @@ void main() {
 @end
 
 @program triangle vs fs
-@program light_cube vs light_cube_fs
+@program light_cube light_cube_vs light_cube_fs
