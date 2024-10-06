@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const sokol = @import("sokol");
 const sg = sokol.gfx;
 const sglue = sokol.glue;
@@ -35,8 +36,8 @@ const state = struct {
 
     var count: u64 = 0;
 
-    var other_image: sg.Image = .{};
-    var image: sg.Image = .{};
+    var other_image: Texture = .{};
+    var image: Texture = .{};
 
     var camera_pos = Vec3.new(0.0, 0.0, 3.0);
     var camera_front = Vec3.new(0.0, 0.0, -1.0);
@@ -54,24 +55,48 @@ const state = struct {
     var shift_down: bool = false;
 };
 
+const Texture = struct {
+    const Self = @This();
+    id: sg.Image = .{},
+
+    pub fn new(allocator: std.mem.Allocator, path: []const u8) !Self {
+        var this: Self = .{};
+        this.id = sg.allocImage();
+
+        var image = try zigimg.Image.fromFilePath(allocator, path);
+        defer image.deinit();
+
+        try image.convert(.rgba32);
+
+        const img_width = image.width;
+        const img_height = image.height;
+
+        var img_desc: sg.ImageDesc = .{
+            .width = @intCast(img_width),
+            .height = @intCast(img_height),
+            .pixel_format = .RGBA8,
+        };
+        img_desc.data.subimage[0][0] = sg.asRange(image.pixels.rgba32);
+
+        sg.initImage(this.id, img_desc);
+
+        return this;
+    }
+
+    pub fn bind_texture(self: Self, slot: comptime_int) void {
+        state.bind.fs.images[slot] = self.id;
+    }
+};
+
 export fn init() void {
     sg.setup(.{
         .environment = sglue.environment(),
         .logger = .{ .func = slog.func },
     });
 
-    sfetch.setup(.{
-        .logger = .{ .func = slog.func },
-        .num_channels = 1,
-        .max_requests = 2,
-        .num_lanes = 1,
-    });
-
     sapp.lockMouse(true);
     sapp.showMouse(false);
 
-    state.image = sg.allocImage();
-    state.other_image = sg.allocImage();
     state.bind.fs.samplers[shader.SLOT__ourTexture_smp] = sg.allocSampler();
     sg.initSampler(state.bind.fs.samplers[shader.SLOT__ourTexture_smp], .{
         .wrap_u = .REPEAT,
@@ -177,24 +202,15 @@ export fn init() void {
         .clear_value = .{ .r = 0.2, .g = 0.3, .b = 0.3, .a = 1.0 },
     };
 
-    _ = sfetch.send(.{
-        .path = "test_image.png",
-        .callback = fetch_callback,
-        .buffer = sfetch.asRange(&state.file_buffer),
-        .user_data = sfetch.asRange(&state.image),
-    });
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-    _ = sfetch.send(.{
-        .path = "other_test_image.png",
-        .callback = fetch_callback,
-        .buffer = sfetch.asRange(&state.file_buffer),
-        .user_data = sfetch.asRange(&state.other_image),
-    });
+    state.image = Texture.new(allocator, "test_image.png") catch return;
+    state.other_image = Texture.new(allocator, "other_test_image.png") catch return;
 }
 
 export fn frame() void {
-    sfetch.dowork();
-
     const cube_positions: [10]Vec3 = [10]Vec3{
         Vec3.new(0.0, 0.0, 0.0),
         Vec3.new(2.0, 5.0, -15.0),
@@ -253,9 +269,9 @@ export fn frame() void {
         model = model.mul(translation_matrix);
 
         if (state.count >= 125) {
-            state.bind.fs.images[shader.SLOT__ourTexture] = state.image;
+            state.image.bind_texture(shader.SLOT__ourTexture);
         } else {
-            state.bind.fs.images[shader.SLOT__ourTexture] = state.other_image;
+            state.other_image.bind_texture(shader.SLOT__ourTexture);
         }
 
         state.vs_params.model = @bitCast(model);
@@ -341,39 +357,6 @@ export fn event(ev: ?*const sapp.Event) void {
 
 export fn cleanup() void {
     sg.shutdown();
-}
-
-export fn fetch_callback(response: ?*const sfetch.Response) void {
-    const resp = response.?;
-    if (resp.fetched) {
-        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-        const allocator = gpa.allocator();
-        defer _ = gpa.deinit();
-
-        const ptr: []const u8 = @as([*]u8, @constCast(@ptrCast(resp.data.ptr.?)))[0..resp.data.size];
-        var image = zigimg.Image.fromMemory(allocator, ptr) catch {
-            state.pass_action.colors[0].clear_value = .{ .r = 1.0, .g = 0.0, .b = 0.0, .a = 1.0 };
-            return;
-        };
-        defer image.deinit();
-
-        const img_width = image.width;
-        const img_height = image.height;
-
-        var img_desc: sg.ImageDesc = .{
-            .width = @intCast(img_width),
-            .height = @intCast(img_height),
-            .pixel_format = .RGBA8,
-        };
-        img_desc.data.subimage[0][0] = sg.asRange(image.pixels.rgba32);
-
-        if (image.pixels.len() > 0) {
-            const image_loc: *sg.Image = @ptrCast(@alignCast(resp.user_data));
-            sg.initImage(image_loc.*, img_desc);
-        }
-    } else if (resp.failed) {
-        state.pass_action.colors[0].clear_value = .{ .r = 1.0, .g = 0.0, .b = 0.0, .a = 1.0 };
-    }
 }
 
 pub fn main() !void {
