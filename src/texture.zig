@@ -10,9 +10,6 @@ id: sg.Image = .{},
 const Self = @This();
 
 pub fn new(allocator: std.mem.Allocator, path: []const u8) !Self {
-    var this: Self = .{};
-    this.id = sg.allocImage();
-
     var image = try zigimg.Image.fromFilePath(allocator, path);
     defer image.deinit();
 
@@ -28,9 +25,7 @@ pub fn new(allocator: std.mem.Allocator, path: []const u8) !Self {
     };
     img_desc.data.subimage[0][0] = sg.asRange(image.pixels.rgba32);
 
-    sg.initImage(this.id, img_desc);
-
-    return this;
+    return .{ .id = sg.makeImage(img_desc) };
 }
 
 pub fn bind_texture(self: Self, slot: comptime_int) void {
