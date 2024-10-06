@@ -33,6 +33,11 @@ const state = struct {
         .view_pos = @bitCast(Vec3.zero),
     };
 
+    var count: u64 = 0;
+
+    var other_image: sg.Image = .{};
+    var image: sg.Image = .{};
+
     var camera_pos = Vec3.new(0.0, 0.0, 3.0);
     var camera_front = Vec3.new(0.0, 0.0, -1.0);
     var camera_up = Vec3.new(0.0, 1.0, 0.0);
@@ -58,14 +63,15 @@ export fn init() void {
     sfetch.setup(.{
         .logger = .{ .func = slog.func },
         .num_channels = 1,
-        .max_requests = 1,
+        .max_requests = 2,
         .num_lanes = 1,
     });
 
     sapp.lockMouse(true);
     sapp.showMouse(false);
 
-    state.bind.fs.images[shader.SLOT__ourTexture] = sg.allocImage();
+    state.image = sg.allocImage();
+    state.other_image = sg.allocImage();
     state.bind.fs.samplers[shader.SLOT__ourTexture_smp] = sg.allocSampler();
     sg.initSampler(state.bind.fs.samplers[shader.SLOT__ourTexture_smp], .{
         .wrap_u = .REPEAT,
@@ -175,6 +181,14 @@ export fn init() void {
         .path = "test_image.png",
         .callback = fetch_callback,
         .buffer = sfetch.asRange(&state.file_buffer),
+        .user_data = sfetch.asRange(&state.image),
+    });
+
+    _ = sfetch.send(.{
+        .path = "other_test_image.png",
+        .callback = fetch_callback,
+        .buffer = sfetch.asRange(&state.file_buffer),
+        .user_data = sfetch.asRange(&state.other_image),
     });
 }
 
@@ -226,7 +240,8 @@ export fn frame() void {
         .swapchain = sglue.swapchain(),
     });
     sg.applyPipeline(state.pipe);
-    sg.applyBindings(state.bind);
+
+    state.count = @mod(state.count + 1, 250);
 
     sg.applyUniforms(.FS, shader.SLOT_fs_params, sg.asRange(&state.fs_params));
     for (0.., cube_positions) |i, position| {
@@ -237,8 +252,15 @@ export fn frame() void {
         model = model.mul(rotation_matrix);
         model = model.mul(translation_matrix);
 
+        if (state.count >= 125) {
+            state.bind.fs.images[shader.SLOT__ourTexture] = state.image;
+        } else {
+            state.bind.fs.images[shader.SLOT__ourTexture] = state.other_image;
+        }
+
         state.vs_params.model = @bitCast(model);
         sg.applyUniforms(.VS, shader.SLOT_vs_params, sg.asRange(&state.vs_params));
+        sg.applyBindings(state.bind);
         sg.draw(0, 36, 1);
     }
 
@@ -346,7 +368,8 @@ export fn fetch_callback(response: ?*const sfetch.Response) void {
         img_desc.data.subimage[0][0] = sg.asRange(image.pixels.rgba32);
 
         if (image.pixels.len() > 0) {
-            sg.initImage(state.bind.fs.images[shader.SLOT__ourTexture], img_desc);
+            const image_loc: *sg.Image = @ptrCast(@alignCast(resp.user_data));
+            sg.initImage(image_loc.*, img_desc);
         }
     } else if (resp.failed) {
         state.pass_action.colors[0].clear_value = .{ .r = 1.0, .g = 0.0, .b = 0.0, .a = 1.0 };

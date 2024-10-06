@@ -57,9 +57,7 @@ void main() {
 	float spec = pow(max(dot(view_dir, reflect_dir), 0.0f), 32);
 	vec3 specular = specular_strength * spec * light_color;
 	
-	vec3 result = (ambient + diffuse + specular) * texture(ourTexture, TexCoord).rgb;
-
-	FragColor = vec4(result, 1.0f);
+	FragColor = vec4((ambient + diffuse + specular), 1.0f) * texture(ourTexture, TexCoord);
 }
 @end
 
