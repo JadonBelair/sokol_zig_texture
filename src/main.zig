@@ -7,86 +7,14 @@ const sapp = sokol.app;
 const slog = sokol.log;
 const sfetch = sokol.fetch;
 
-const zigimg = @import("zigimg");
-
 const zlm = @import("zlm");
 const Mat4 = zlm.Mat4;
 const Vec3 = zlm.Vec3;
 
 const shader = @import("shaders/texture.glsl.zig");
 
-const state = struct {
-    var pass_action: sg.PassAction = .{};
-    var bind: sg.Bindings = .{};
-    var pipe: sg.Pipeline = .{};
-    var light_bind: sg.Bindings = .{};
-    var light_pipe: sg.Pipeline = .{};
-    var file_buffer: [512 * 1024]u8 = std.mem.zeroes([512 * 1024]u8);
-    var vs_params: shader.VsParams = .{
-        .model = std.mem.zeroes([16]f32),
-        .view = std.mem.zeroes([16]f32),
-        .projection = std.mem.zeroes([16]f32),
-    };
-
-    var fs_params: shader.FsParams = .{
-        .light_color = @bitCast(Vec3.new(1.0, 1.0, 1.0)),
-        .light_pos = @bitCast(Vec3.zero),
-        .view_pos = @bitCast(Vec3.zero),
-    };
-
-    var count: u64 = 0;
-
-    var other_image: Texture = .{};
-    var image: Texture = .{};
-
-    var camera_pos = Vec3.new(0.0, 0.0, 3.0);
-    var camera_front = Vec3.new(0.0, 0.0, -1.0);
-    var camera_up = Vec3.new(0.0, 1.0, 0.0);
-
-    var pitch: f32 = 0.0;
-    var yaw: f32 = -90.0;
-
-    var w_down: bool = false;
-    var a_down: bool = false;
-    var s_down: bool = false;
-    var d_down: bool = false;
-
-    var space_down: bool = false;
-    var shift_down: bool = false;
-};
-
-const Texture = struct {
-    const Self = @This();
-    id: sg.Image = .{},
-
-    pub fn new(allocator: std.mem.Allocator, path: []const u8) !Self {
-        var this: Self = .{};
-        this.id = sg.allocImage();
-
-        var image = try zigimg.Image.fromFilePath(allocator, path);
-        defer image.deinit();
-
-        try image.convert(.rgba32);
-
-        const img_width = image.width;
-        const img_height = image.height;
-
-        var img_desc: sg.ImageDesc = .{
-            .width = @intCast(img_width),
-            .height = @intCast(img_height),
-            .pixel_format = .RGBA8,
-        };
-        img_desc.data.subimage[0][0] = sg.asRange(image.pixels.rgba32);
-
-        sg.initImage(this.id, img_desc);
-
-        return this;
-    }
-
-    pub fn bind_texture(self: Self, slot: comptime_int) void {
-        state.bind.fs.images[slot] = self.id;
-    }
-};
+const Texture = @import("texture.zig");
+const state = @import("state.zig");
 
 export fn init() void {
     sg.setup(.{
